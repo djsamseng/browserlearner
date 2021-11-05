@@ -1,0 +1,14 @@
+### cuda support
+numpy==1.20
+numba
+### Websocket
+python-socketio[asyncio-client]
+asyncio
+aiohttp
+### pyaudio
+wheel
+pyaudio
+scipy
+### opencv
+opencv-python
+matplotlib
