@@ -12,3 +12,5 @@ scipy
 ### opencv
 opencv-python
 matplotlib
+### keyboard
+pynput
