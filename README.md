@@ -2,7 +2,7 @@
 ### Setting up audio loopback
 ```bash
 $ pacmd load-module module-loopback latency_msec=5pav
-$ pavucontrol 
+$ pavucontrol
 # Input Devices
 # Show All Input Devices
 # Click the green check mark next to "Monitor of Built-in Audio Analog Stereo"
@@ -65,4 +65,11 @@ $ cd pycli
 $ source ./env/bin/activate
 $ python3 main.py --letters
 $ python3 main.py --youtube
+```
+
+## WAV2VEC test
+```bash
+$ conda create --name torch python=3.8
+$ conda activate torch
+$ python wav2vec_test.py
 ```

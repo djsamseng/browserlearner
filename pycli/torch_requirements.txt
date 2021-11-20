@@ -1,0 +1,9 @@
+### cuda support
+numpy
+numba
+torch
+torchvision
+torchaudio
+mpi4py
+
+pyaudio

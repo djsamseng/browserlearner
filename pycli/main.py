@@ -5,18 +5,20 @@ import base64
 import asyncio
 import cv2
 import numpy as np
+import pocketsphinx
 import socketio
 
 
 sio = socketio.AsyncClient()
 
+DIC_PATH = "/home/samuel/dev/browserlearner/pycli/cmudict-en-us.dict"
 SERVER_URL = "http://localhost:4000"
 BROWSER_WIDTH = 600
 BROWSER_HEIGHT = 800
 
 def get_line_len(line, size):
     # 5 = 80a + b
-    # 1 = 6a + b 
+    # 1 = 6a + b
     size_mult = 6 * size / 74 + 38 / 74
     return len(line) * size_mult
 
@@ -24,40 +26,53 @@ async def train_letters():
     letters = []
     # ! # etc.
     for i in range(33, 47+1):
-        letters.append(chr(i))
+        pass
+        #letters.append(chr(i))
     # 0 to 9
     for i in range(48, 57+1):
-        letters.append(chr(i))
+        pass
+        #letters.append(chr(i))
     # : ; etc.
     for i in range(58, 65+1):
-        letters.append(chr(i))
+        pass
+        #letters.append(chr(i))
     # A to Z
     for i in range(65, 90+1):
-        letters.append(chr(i))
+        pass
+        #letters.append(chr(i))
     # [ ^ etc
     for i in range(91, 97+1):
-        letters.append(chr(i))
+        pass
+        #letters.append(chr(i))
     # a to z
     for i in range(97, 122):
         letters.append(chr(i))
     # { | etc.
     for i in range(122, 126+1):
-        letters.append(chr(i))
-    
+        pass
+        #letters.append(chr(i))
+
     for letter in letters:
         size = np.random.randint(6, 80)
         line_len = get_line_len(letter, size)
         x = np.random.randint(BROWSER_WIDTH - line_len)
-        y = np.random.randint(BROWSER_HEIGHT - line_len)
-        
+        y = np.random.randint(BROWSER_HEIGHT - 400 - line_len)
+
         rotate = np.random.randint(-40, 40)
-        await goto(
-            SERVER_URL + \
+        url = SERVER_URL + \
             "/letters?letter=" + \
             letter + \
             "&x=" + str(x) + "&y=" + str(y) + \
             "&size=" + str(size) + \
-            "&rotate=" + str(rotate))
+            "&rotate=" + str(rotate)
+        await goto(url)
+        print("url:", url)
+        for phrase in pocketsphinx.LiveSpeech(dic=DIC_PATH):
+            phrase_str = str(phrase).rstrip(".")
+            print(phrase, phrase.score())
+            if phrase_str == letter and phrase.score() > -1800:
+                print("Correct!", letter)
+                break
 
 async def train_youtube():
     await asyncio.sleep(2)
@@ -95,16 +110,16 @@ async def goto(url):
     await sio.emit("goto", url, callback=cb)
     await ft
     #headers = {'content-type': 'application/json'}
-    #r = requests.post(SERVER_URL + "/goto", 
+    #r = requests.post(SERVER_URL + "/goto",
     #   headers=headers, data=json.dumps({ "url": url }))
     #print(r.status_code, r.reason)
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--youtube", 
-        dest="youtube", 
-        nargs="?", 
+        "--youtube",
+        dest="youtube",
+        nargs="?",
         const=True, # if provided set to true
         default=False # if not provided set to false
     )
