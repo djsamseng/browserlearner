@@ -28,7 +28,7 @@ class AudioGrabber():
                         rate=RATE,
                         input=True,
                         #output=True,
-                        #input_device_index=0,
+                        #input_device_index=0, # set default input source instead
                         frames_per_buffer=CHUNK)
         self.interval = 0.1
         self.predict_seconds = 5
@@ -46,7 +46,19 @@ class AudioGrabber():
                 print("No data")
         frames = np.array(frames)
         frames = np.concatenate(frames)
+        # TODO return array of intervals
         return frames
+
+def play_numpy(data, rate=RATE):
+    p = pyaudio.PyAudio()
+    stream = p.open(
+        format=FORMAT,
+        channels=CHANNELS,
+        rate=rate,
+        output=True,
+    )
+    data_bytes = data.tobytes()
+    stream.write(data_bytes)
 
 def wav2vec_test():
 
@@ -79,6 +91,63 @@ def wav2vec_test():
         t1 = time.time()
         print(transcription, input_audio.shape, input_audio.dtype, "total:", t1 - t0)
 
+
+    def binary_search_remove(audio_orig, actual, from_begin, x0=None, x1=None, ):
+        if x0 is None:
+            x0 = 0
+        if x1 is None:
+            x1 = audio_orig.shape[0]
+        itr = int((x1 - x0) // 2) + x0
+
+        if from_begin:
+            audio = audio_orig[itr:]
+        else:
+            audio = audio_orig[:itr]
+
+        transcription = predict_audio(audio)
+        print(x0, x1, itr, transcription)
+        if from_begin:
+            if transcription == actual:
+                if itr == x0:
+                    return itr
+                return binary_search_remove(audio_orig, actual, from_begin=from_begin, x0=itr, x1=x1)
+            if itr == x0:
+                return itr - 1
+            return binary_search_remove(audio_orig, actual, from_begin=from_begin, x0=x0, x1=itr)
+        else:
+            if transcription == actual:
+                if itr == x0:
+                    return itr
+                return binary_search_remove(audio_orig, actual, from_begin=from_begin, x0=x0, x1=itr)
+            if itr == x0:
+                return itr + 1
+            return binary_search_remove(audio_orig, actual, from_begin=from_begin, x0=itr, x1=x1)
+
+    def find_mininal_word(word="TEST"):
+        file_name = "./data/recordings/" + word.lower() + ".wav"
+        data = wavfile.read(file_name)
+        framerate = data[0]
+        sounddata = data[1]
+        input_audio_orig, _ = librosa.load(file_name, sr=16000)
+        input_audio = input_audio_orig.copy()
+        print(predict_audio(input_audio[18038:]), predict_audio(input_audio[:29590]))
+
+        begin_idx = binary_search_remove(input_audio_orig, word, from_begin=True)
+        input_audio = input_audio[begin_idx:]
+
+        end_idx = binary_search_remove(input_audio_orig, word, from_begin=False)
+        input_audio = input_audio[:end_idx]
+
+        transcription = predict_audio(input_audio)
+        print(input_audio.shape, "Begin idx:", begin_idx, "End idx:", end_idx, "T:", transcription)
+        play_numpy(input_audio)
+        play_numpy(input_audio_orig)
+        play_numpy(input_audio)
+
+
+    find_mininal_word("TEST")
+    find_mininal_word("A")
+    return
     audio_grabber = AudioGrabber()
     print("Start talking")
     while True:

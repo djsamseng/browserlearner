@@ -67,6 +67,7 @@ async def train_letters():
             "&rotate=" + str(rotate)
         await goto(url)
         print("url:", url)
+        # TODO: Replace with wav2vec_test.py
         for phrase in pocketsphinx.LiveSpeech(dic=DIC_PATH):
             phrase_str = str(phrase).rstrip(".")
             print(phrase, phrase.score())

@@ -24,6 +24,7 @@ class WebBrowserProxy {
     private d_browser?: Browser;
     private d_browserPage?: Page;
     private d_cdpSession?: CDPSession;
+    private d_lastFrame?: string; // base64 bytes
     constructor() {
 
     }
@@ -59,8 +60,15 @@ class WebBrowserProxy {
             console.log("Got frame:", cnt++);
             await client.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
             //fs.writeFileSync('frame' + cnt + '.png', frame.data, 'base64');
-            socket.emit('frame', frame.data)
+            this.d_lastFrame = frame.data;
+            socket.emit('frame', frame.data);
         });
+        setInterval(() => {
+            // Ensure we don't get stuck with an old frame
+            if (this.d_lastFrame) {
+                socket.emit('frame', this.d_lastFrame);
+            }
+        }, 1000);
         await page.goto("http://google.com");
         await client.send('Page.startScreencast', {
             format: 'png', everyNthFrame: 1
@@ -106,7 +114,7 @@ class WebBrowserProxy {
                 throw new Error("No CDP Session");
             }
             await this.d_cdpSession.send('Page.stopScreencast');
-            
+
             await this.d_browserPage?.close();
             await this.d_browser?.close();
             this.d_cdpSession = undefined;
