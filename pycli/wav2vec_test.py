@@ -3,6 +3,7 @@ import time
 
 import torch
 import librosa
+import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 from scipy.io import wavfile
@@ -48,6 +49,101 @@ class AudioGrabber():
         frames = np.concatenate(frames)
         # TODO return array of intervals
         return frames
+
+class FFTAnalyzer():
+    def __init__(self, audio, rate, jump_ms = 20) -> None:
+        chunk_size = 1024
+        windows_per_second = rate / chunk_size
+        fft_sampled_every_n_ms = 1000 / windows_per_second
+        # 64 ms for rate=16000
+        bucket_resolution = rate / chunk_size
+        step_size = int(rate * jump_ms // 1000)
+        print(
+            "FFT window size:", fft_sampled_every_n_ms, "ms",
+            "FFT resoltion:", bucket_resolution, "hz",
+            "step size:", step_size,
+            "chunk size:", chunk_size
+        )
+
+        num_steps = len(range(0, audio.shape[0] - chunk_size, step_size))
+        time_buckets = np.zeros((num_steps, chunk_size), dtype=np.complex128)
+        x = np.linspace(0, rate, chunk_size)
+        for i in range(num_steps):
+            audio_idx = i * step_size
+            audio_in = audio[audio_idx:audio_idx+chunk_size]
+            buckets = np.fft.fft(audio_in)
+            buckets[np.where(x<100)] = 0
+            buckets[np.where(x>rate-1000)] = 0
+            buckets[np.abs(buckets<1)] = 0
+            #has some zero error jump_ms=5
+            #buckets[np.where(x<100)] = 0
+            #buckets[np.where(x>rate-1000)] = 0
+            #buckets[np.abs(buckets<2)] = 0
+            #plt.plot(x, np.abs(buckets))
+            #plt.show()
+            time_buckets[i] = buckets
+
+        self.audio = audio
+        self.time_buckets = time_buckets
+        self.chunk_size = chunk_size
+        self.num_steps = num_steps
+        self.rate = rate
+        self.step_size = step_size
+
+    def find_closest_fft_bucket(self, other_buckets):
+        closest_distance = np.linalg.norm(self.time_buckets[0] - other_buckets)
+        closest_idx = 0
+        for i in range(self.num_steps):
+            distance = np.linalg.norm(self.time_buckets[i] - other_buckets)
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_idx = i
+        print(closest_distance)
+        return closest_idx
+
+    def create_closest_match(self, goal_fft_anaylzer):
+        other = goal_fft_anaylzer
+        np.testing.assert_allclose(self.step_size, other.step_size)
+        np.testing.assert_allclose(self.rate, other.rate)
+        output = np.zeros(shape=other.audio.shape)
+        for i in range(other.num_steps):
+            goal_buckets = other.time_buckets[i]
+            closest_idx = self.find_closest_fft_bucket(goal_buckets)
+            closest_audio_idx = closest_idx * self.step_size
+            closest_audio = self.audio[closest_audio_idx:closest_audio_idx+self.chunk_size]
+            output_audio_idx = i * self.step_size
+            output[output_audio_idx:output_audio_idx+self.chunk_size] = closest_audio
+        return output.astype(np.float32)
+
+
+def repeat_after_me():
+    rate = 16000
+    hand_test_audio_file_name = "./data/recordings/test_from_phonemic_chart_sounds.wav"
+    hand_test_audio, _ = librosa.load(hand_test_audio_file_name, sr=rate)
+    hand_test_fft_analyzer = FFTAnalyzer(hand_test_audio, rate)
+
+    word = "TEST"
+    file_name = "./data/recordings/" + word.lower() + ".wav"
+
+    audio, _ = librosa.load(file_name, sr=rate)
+    test_fft_analyzer = FFTAnalyzer(audio, rate)
+    phonemics_file_name = "./data/recordings/phonemic_chart_sounds.wav"
+    phonemics_audio, _ = librosa.load(phonemics_file_name, sr=rate)
+    phonemics_fft_analyzer = FFTAnalyzer(phonemics_audio, rate)
+
+
+    # TODO: This should be able to find an exact match, even step_size=1 has 12.744 error
+    # thus frequency analysis doesn't provide the signal
+    hand_match = phonemics_fft_analyzer.create_closest_match(hand_test_fft_analyzer)
+    #play_numpy(hand_test_audio, rate=rate)
+    play_numpy(hand_match, rate=rate)
+
+    # now match_audio and hand_match sound similar
+    match_audio = phonemics_fft_analyzer.create_closest_match(test_fft_analyzer)
+    print(match_audio.dtype, match_audio.shape, audio.shape)
+    play_numpy(audio, rate=rate)
+    time.sleep(1)
+    play_numpy(match_audio, rate=rate)
 
 def play_numpy(data, rate=RATE):
     p = pyaudio.PyAudio()
@@ -144,7 +240,6 @@ def wav2vec_test():
         play_numpy(input_audio_orig)
         play_numpy(input_audio)
 
-
     find_mininal_word("TEST")
     find_mininal_word("A")
     return
@@ -196,4 +291,5 @@ def wav2vec_test():
     read_and_predict(file_name)
 
 if __name__ == "__main__":
-    wav2vec_test()
+    repeat_after_me()
+    #wav2vec_test()

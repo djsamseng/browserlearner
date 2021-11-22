@@ -68,6 +68,9 @@ async def train_letters():
         await goto(url)
         print("url:", url)
         # TODO: Replace with wav2vec_test.py
+        # sounds can make from ./data/recordings/phonemic_chart_sounds.wav
+        # sounds are similar if the frequency domains for chunks are similar
+        # dynamic programming to align sounds
         for phrase in pocketsphinx.LiveSpeech(dic=DIC_PATH):
             phrase_str = str(phrase).rstrip(".")
             print(phrase, phrase.score())
