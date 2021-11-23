@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import soundfile as sf
 from scipy.io import wavfile
+import scipy.signal
 from IPython.display import Audio
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Tokenizer
 
@@ -62,8 +63,10 @@ class FFTAnalyzer():
             "FFT window size:", fft_sampled_every_n_ms, "ms",
             "FFT resoltion:", bucket_resolution, "hz",
             "step size:", step_size,
+            "step size ms:", jump_ms,
             "chunk size:", chunk_size
         )
+        ### FFT of how the frequencies change instead of absolute difference
 
         num_steps = len(range(0, audio.shape[0] - chunk_size, step_size))
         time_buckets = np.zeros((num_steps, chunk_size), dtype=np.complex128)
@@ -71,16 +74,27 @@ class FFTAnalyzer():
         for i in range(num_steps):
             audio_idx = i * step_size
             audio_in = audio[audio_idx:audio_idx+chunk_size]
-            buckets = np.fft.fft(audio_in)
-            buckets[np.where(x<100)] = 0
-            buckets[np.where(x>rate-1000)] = 0
-            buckets[np.abs(buckets<1)] = 0
+            # Use the magnitude of the frequency
+            # Phase information is dropped
+            buckets = np.abs(np.fft.fft(audio_in))
+            buckets[np.where(x<50)] = 0
+            buckets[np.where(x>1500)] = 0
+            # TODO: smooth out the buckets?
+            # TODO: Hello at different frequencies still sounds the same
+            freq_max = np.max(buckets)
+            inc_factor = 7.0 / freq_max
+            buckets[:] *= inc_factor
+            #buckets[np.abs(buckets<1)] = 0
             #has some zero error jump_ms=5
             #buckets[np.where(x<100)] = 0
             #buckets[np.where(x>rate-1000)] = 0
             #buckets[np.abs(buckets<2)] = 0
-            #plt.plot(x, np.abs(buckets))
-            #plt.show()
+            if False:
+                print(i/num_steps)
+                plt.ylim(0, 7)
+                plt.xlim(0,8000)
+                plt.plot(x, np.abs(buckets))
+                plt.show()
             time_buckets[i] = buckets
 
         self.audio = audio
@@ -91,6 +105,8 @@ class FFTAnalyzer():
         self.step_size = step_size
 
     def find_closest_fft_bucket(self, other_buckets):
+        # instead of norm, find patterns in how the frequencies change
+        # hello at different frequencies still sounds the same
         closest_distance = np.linalg.norm(self.time_buckets[0] - other_buckets)
         closest_idx = 0
         for i in range(self.num_steps):
@@ -101,7 +117,7 @@ class FFTAnalyzer():
         print(closest_distance)
         return closest_idx
 
-    def create_closest_match(self, goal_fft_anaylzer):
+    def create_closest_match_fft(self, goal_fft_anaylzer):
         other = goal_fft_anaylzer
         np.testing.assert_allclose(self.step_size, other.step_size)
         np.testing.assert_allclose(self.rate, other.rate)
@@ -110,40 +126,167 @@ class FFTAnalyzer():
             goal_buckets = other.time_buckets[i]
             closest_idx = self.find_closest_fft_bucket(goal_buckets)
             closest_audio_idx = closest_idx * self.step_size
+            # TODO: Is chunk_size the right length?
             closest_audio = self.audio[closest_audio_idx:closest_audio_idx+self.chunk_size]
             output_audio_idx = i * self.step_size
             output[output_audio_idx:output_audio_idx+self.chunk_size] = closest_audio
         return output.astype(np.float32)
 
+    def find_closest_audio_chunk(self, other_chunk):
+        audio_len = min(self.chunk_size, other_chunk.shape[0])
+        closest_distance = np.linalg.norm(self.audio[0:audio_len] - other_chunk)
+        closest_idx = 0
+        for i in range(0, self.audio.shape[0] - audio_len, audio_len):
+            distance = np.linalg.norm(self.audio[i:i+audio_len] - other_chunk)
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_idx = i
+        print(closest_distance)
+        return closest_idx
+
+    def create_closest_match_audio(self, goal_fft_analyzer):
+        other = goal_fft_analyzer
+        np.testing.assert_allclose(self.rate, other.rate)
+        np.testing.assert_allclose(self.chunk_size, other.chunk_size)
+        output = np.zeros(shape=other.audio.shape)
+        for i in range(0, other.audio.shape[0], other.chunk_size):
+            goal_audio = other.audio[i:i+other.chunk_size]
+            closest_audio_idx = self.find_closest_audio_chunk(goal_audio)
+            audio_len = min(self.chunk_size, goal_audio.shape[0])
+            output[i:i+audio_len] = self.audio[closest_audio_idx:closest_audio_idx+audio_len]
+        return output.astype(np.float32)
+
+def change_audio_frequency(audio, freq_change=-1, chunk_size=1024):
+    aud = np.zeros_like(audio)
+    for i in range(0, audio.shape[0] - chunk_size, chunk_size):
+        buckets = np.fft.fft(audio[i:i+chunk_size])
+        buckets = np.roll(buckets, freq_change)
+        if freq_change > 0:
+            buckets[:freq_change] = 0
+        else:
+            buckets[freq_change:] = 0
+        back = np.fft.ifft(buckets)
+        aud[i:i+chunk_size] = back.real.astype(np.float32)
+    return aud
+
+def speedx(sound_array, factor):
+    """ Multiplies the sound's speed by some `factor` """
+    indices = np.round( np.arange(0, len(sound_array), factor) )
+    indices = indices[indices < len(sound_array)].astype(int)
+    return sound_array[ indices.astype(int) ]
+
+
+def stretch(sound_array, f, window_size, h):
+    """ Stretches the sound by a factor `f` """
+
+    phase  = np.zeros(window_size)
+    hanning_window = np.hanning(window_size)
+    result = np.zeros( int(len(sound_array) /f + window_size), dtype=np.complex128)
+
+    for i in np.arange(0, len(sound_array)-(window_size+h), h*f):
+        i = int(i)
+        # two potentially overlapping subarrays
+        a1 = sound_array[i: i + window_size]
+        a2 = sound_array[i + h: i + window_size + h]
+
+        # resynchronize the second array on the first
+        s1 =  np.fft.fft(hanning_window * a1)
+        s2 =  np.fft.fft(hanning_window * a2)
+        phase = (phase + np.angle(s2/s1)) % 2*np.pi
+        a2_rephased = np.fft.ifft(np.abs(s2)*np.exp(1j*phase))
+
+        # add to result
+        i2 = int(i/f)
+        result[i2 : i2 + window_size] += hanning_window*a2_rephased
+
+    #result = ((2**(16-4)) * result/result.max()) # normalize (16bit)
+    return result.real.astype(np.float32)
+
+def pitch_shift(sound_array, factor=1.0, window_size=2**13, h=2**11):
+    stretched = stretch(sound_array, 1.0/factor, window_size, h)
+    return speedx(stretched[window_size:], factor)
+
+
+def plot_test_recordings():
+    path_begin = "./data/recordings/test"
+    rate = 44100
+    paths = [path_begin + str(i) + ".wav" for i in range(1,6,1)]
+    loads = [librosa.load(path, sr=rate) for path in paths]
+    audios = [audio for audio, _ in loads]
+    num_plots = len(audios)
+
+    chunk_size = 1024
+    step_size = 1024//4
+    audio_lens = [len(aud) for aud in audios]
+    audio_len = min(audio_lens)
+    x = np.linspace(0, rate, chunk_size)
+    for i in range(0, audio_len - chunk_size, step_size):
+        print("step:", i / audio_len)
+        for j in range(num_plots):
+            freq_buckets = np.fft.fft(audios[j][i:i+chunk_size])
+            plt.subplot(num_plots, 1, j+1)
+            plt.ylim(0, 7)
+            plt.xlim(50,200)
+            plt.plot(x, np.abs(freq_buckets))
+        plt.show()
 
 def repeat_after_me():
     rate = 16000
+
     hand_test_audio_file_name = "./data/recordings/test_from_phonemic_chart_sounds.wav"
     hand_test_audio, _ = librosa.load(hand_test_audio_file_name, sr=rate)
-    hand_test_fft_analyzer = FFTAnalyzer(hand_test_audio, rate)
 
     word = "TEST"
     file_name = "./data/recordings/" + word.lower() + ".wav"
-
     audio, _ = librosa.load(file_name, sr=rate)
+    if False:
+        play_numpy(audio)
+        audio_shifted = librosa.effects.pitch_shift(audio, sr=16000, n_steps=-8)
+        play_numpy(audio_shifted)
+        play_numpy(change_audio_frequency(audio, 500))
+        time.sleep(1)
+        play_numpy(pitch_shift(audio, 1.0, 1024, 1024//2))
+        time.sleep(1)
+        for i in np.arange(0.7, 1.4, 0.1):
+            shifted = pitch_shift(audio, i, 1024, 1024//2)
+            print(shifted.shape)
+            play_numpy(shifted)
+
+
+    hand_test_fft_analyzer = FFTAnalyzer(hand_test_audio, rate)
+
     test_fft_analyzer = FFTAnalyzer(audio, rate)
     phonemics_file_name = "./data/recordings/phonemic_chart_sounds.wav"
     phonemics_audio, _ = librosa.load(phonemics_file_name, sr=rate)
     phonemics_fft_analyzer = FFTAnalyzer(phonemics_audio, rate)
 
 
-    # TODO: This should be able to find an exact match, even step_size=1 has 12.744 error
-    # thus frequency analysis doesn't provide the signal
-    hand_match = phonemics_fft_analyzer.create_closest_match(hand_test_fft_analyzer)
-    #play_numpy(hand_test_audio, rate=rate)
+
+    if False:
+        hand_match_audio = phonemics_fft_analyzer.create_closest_match_audio(hand_test_fft_analyzer)
+        print(hand_match_audio, hand_match_audio.dtype)
+        play_numpy(hand_test_fft_analyzer.audio)
+        time.sleep(1)
+        play_numpy(hand_match_audio)
+    if False:
+        audio_match = phonemics_fft_analyzer.create_closest_match_audio(test_fft_analyzer)
+        play_numpy(audio_match)
+        time.sleep(1)
+        play_numpy(test_fft_analyzer.audio)
+        return
+
+    hand_match = phonemics_fft_analyzer.create_closest_match_fft(hand_test_fft_analyzer)
     play_numpy(hand_match, rate=rate)
+    time.sleep(1)
+    play_numpy(hand_test_audio, rate=rate)
 
     # now match_audio and hand_match sound similar
-    match_audio = phonemics_fft_analyzer.create_closest_match(test_fft_analyzer)
+    match_audio = phonemics_fft_analyzer.create_closest_match_fft(test_fft_analyzer)
     print(match_audio.dtype, match_audio.shape, audio.shape)
-    play_numpy(audio, rate=rate)
     time.sleep(1)
     play_numpy(match_audio, rate=rate)
+    time.sleep(1)
+    play_numpy(audio, rate=rate)
 
 def play_numpy(data, rate=RATE):
     p = pyaudio.PyAudio()
@@ -165,15 +308,12 @@ def wav2vec_test():
     model = model.to(device)
 
     def predict_audio(input_audio):
-        t0 = time.time()
         input_values = tokenizer(input_audio, return_tensors="pt").input_values
         input_values = input_values.to(device)
         logits = model(input_values).logits
         predicted_ids = torch.argmax(logits, dim=-1)
         transcription = tokenizer.batch_decode(predicted_ids)[0]
-        t1 = time.time()
         return transcription
-        print(transcription, " took:", t1 - t0)
 
     def read_and_predict(file_name):
         t0 = time.time()
@@ -290,6 +430,62 @@ def wav2vec_test():
     file_name = "./data/recordings/a.wav"
     read_and_predict(file_name)
 
+def find_peaks(audio, min_step_size):
+    pass
+
+def get_distances_between_elements(ar):
+    distances = []
+    for i in range(1, len(ar), 1):
+        distances.append(ar[i] - ar[i-1])
+    return distances
+
+def make_e_of_test():
+    file_name = "./data/recordings/test3.wav"
+    input_audio, _ = librosa.load(file_name, sr=16000)
+    plt.subplot(3, 1, 1)
+    #audio_sample = input_audio[6280:6380]
+    #print(np.where(audio_sample == np.max(audio_sample)))
+    start = 6302
+    end = start + 3200
+    audio_sample = input_audio[start:end]
+    print(np.where(audio_sample == np.max(audio_sample[200:])))
+    peaks_all, _ = scipy.signal.find_peaks(audio_sample, prominence=0.2)
+    peaks = np.concatenate([peaks_all[:12], [peaks_all[12], peaks_all[14], peaks_all[16]]])
+
+    peak_distances = get_distances_between_elements(peaks)
+    print(peaks, peak_distances)
+
+    second_half_peaks, _ = scipy.signal.find_peaks(audio_sample[1400:], prominence=0.05)
+    second_half_peaks += 1400
+    print(second_half_peaks, get_distances_between_elements(second_half_peaks))
+    markevery = np.concatenate([peaks, second_half_peaks])
+    plt.plot(audio_sample, "-bD", markevery=markevery)
+
+    data = np.zeros_like(audio_sample)
+    minimal_sample = audio_sample[:78]
+    # tile minimal_sample 15 times, spreading out the signal by 2 frames each time
+    # then tile 20 times
+    plt.subplot(3, 1, 2)
+    plt.plot(minimal_sample)
+
+    num_repeats = 5
+    copy_play = np.tile(audio_sample, num_repeats)
+    dist_to_increase = audio_sample[-1] - audio_sample[0]
+    print(dist_to_increase)
+    for i in range(num_repeats):
+        audio_start = i * len(audio_sample)
+        audio_end = (i + 1) * len(audio_sample)
+        #copy_play[audio_start:audio_end] += dist_to_increase * i
+
+    plt.subplot(3, 1, 3)
+    plt.plot(copy_play)
+    plt.show()
+
+    play_numpy(copy_play)
+
+
 if __name__ == "__main__":
-    repeat_after_me()
+    make_e_of_test()
+    #plot_test_recordings()
+    #repeat_after_me()
     #wav2vec_test()
