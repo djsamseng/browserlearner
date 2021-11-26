@@ -483,6 +483,92 @@ def make_e_of_test():
 
     play_numpy(copy_play)
 
+def make_e_of_test_reload(input_audio):
+    plt.subplot(3, 1, 1)
+    #audio_sample = input_audio[6280:6380]
+    #print(np.where(audio_sample == np.max(audio_sample)))
+    start = 6302
+    end = start + 3200
+    audio_sample = input_audio[start:end]
+    print(np.where(audio_sample == np.max(audio_sample[200:])))
+    peaks_all, _ = scipy.signal.find_peaks(audio_sample, prominence=0.2)
+    peaks = np.concatenate([peaks_all[:12], [peaks_all[12], peaks_all[14], peaks_all[16]]])
+
+    peak_distances = get_distances_between_elements(peaks)
+    print(peaks, peak_distances)
+
+    second_half_peaks, _ = scipy.signal.find_peaks(audio_sample[1400:], prominence=0.05)
+    second_half_peaks += 1400
+    print(second_half_peaks, get_distances_between_elements(second_half_peaks))
+    markevery = np.concatenate([peaks, second_half_peaks])
+    plt.plot(audio_sample, "-bD", markevery=markevery)
+
+    minimal_sample = audio_sample[:78]
+    # tile minimal_sample 15 times, spreading out the signal by 2 frames each time
+    # then tile 20 times
+
+    begin = 0
+    end = 78
+    data = np.zeros_like(audio_sample[begin:end])
+    the_sin = np.sin(1.1 * np.arange(0,end-begin) )
+    data[:] = the_sin * 0.1 - 0.1
+    data[0] = 0
+
+    data[7:] = the_sin[7:] * 0.05 - 0.15
+    data[27:] = the_sin[27:] * 0.02 - 0.17
+    #the_sin = np.sin(1.2 * np.arange(0, 78) )
+    data[35:] = the_sin[35:] * 0.04 - 0.18
+    the_sin = np.sin(0.85 * np.arange(0, 78) - np.pi/2) # start at -1
+    data[39:] = the_sin[:-39] * 0.04 - 0.2
+    the_sin = np.sin(1.2 * np.arange(0,78) + np.pi/2) # start at 1
+    data[50:] = the_sin[:-50] * 0.015 - 0.17
+    the_sin = np.sin(0.8 * np.arange(0,78) - np.pi/2) # start at -1
+    data[63:] = the_sin[:-63] * 0.04 - 0.14
+    the_sin = np.sin(0.2 * np.arange(0, 78) - np.pi/2) # start at 0
+    data[70:] = the_sin[:-70] * 0.1
+
+    plt.subplot(3, 1, 2)
+    plt.plot(minimal_sample)
+    plt.plot(data)
+
+    begin += 78
+    end += 79
+    minimal_sample2 = audio_sample[begin:end]
+    data2 = data.copy()
+    data2 = np.concatenate([data2, [data2[-1]]])
+    np.testing.assert_allclose(minimal_sample2.shape, data2.shape)
+
+    begin += 79
+    end += 79
+    minimal_sample3 = audio_sample[begin:end]
+    data3 = data2.copy()
+    the_sin = np.sin(1.1 * np.arange(0,end-begin) + np.pi/2 )
+    data3[:13] = the_sin[:13] * 0.1 - 0.1
+    the_sin = np.sin(0.85 * np.arange(0,end-begin) + np.pi/2)
+    data3[5:13] = the_sin[:8] * 0.1 - 0.2
+    np.testing.assert_allclose(minimal_sample3.shape, data3.shape)
+
+    begin += 79
+    end += 80
+    minimal_sample4 = audio_sample[begin:end]
+    data4 = data3.copy()
+    data4 -= 0.02
+    data4 = np.concatenate([data4, [data4[-1]]])
+    np.testing.assert_allclose(minimal_sample4.shape, data4.shape)
+
+    plt.subplot(3, 1, 3)
+    plt.plot(minimal_sample4)
+    plt.plot(data4)
+
+
+    plt.show()
+
+    num_repeats = 100
+    #play_numpy(np.tile(audio_sample[:78], num_repeats))
+    #time.sleep(1)
+    #play_numpy(np.tile(data2, num_repeats))
+
+
 
 if __name__ == "__main__":
     make_e_of_test()
