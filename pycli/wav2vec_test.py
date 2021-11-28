@@ -483,8 +483,198 @@ def make_e_of_test():
 
     play_numpy(copy_play)
 
+def make_e_section(length, yshift=-0.1, first_val = 0.0):
+    if first_val is None:
+        first_val = 0.0
+    data = np.zeros(shape=(length,), dtype=np.float32)
+    the_sin = np.sin(1.1 * np.arange(0,length) )
+    data[:] = the_sin * 0.1 + yshift
+    data[0] = first_val
+
+    data[7:] = the_sin[7:] * 0.05 + yshift - 0.05
+    data[27:] = the_sin[27:] * 0.02 + yshift - 0.07
+    #the_sin = np.sin(1.2 * np.arange(0, 78) )
+    data[35:] = the_sin[35:] * 0.04 + yshift - 0.08
+    the_sin = np.sin(0.85 * np.arange(0, length) - np.pi/2) # start at -1
+    data[39:] = the_sin[:-39] * 0.04 + yshift - 0.1
+    the_sin = np.sin(1.2 * np.arange(0,length) + np.pi/2) # start at 1
+    data[50:] = the_sin[:-50] * 0.015 + yshift - 0.07
+    the_sin = np.sin(0.8 * np.arange(0,length) - np.pi/2) # start at -1
+    data[63:] = the_sin[:-63] * 0.04 + yshift - 0.04
+    the_sin = np.sin(0.2 * np.arange(0, length) - np.pi/2) # start at -1
+    data[70:] = the_sin[:-70] * 0.1 + yshift + 0.1
+
+    return data
+
+    if length >= 104:
+        the_sin = np.sin(0.05 * np.arange(0, length) - np.pi/2) # start at -1
+        data[70:] = the_sin[:-70] * 0.1 + yshift + 0.1
+    elif length >= 100:
+        the_sin = np.sin(0.05 * np.arange(0, length) - np.pi/2) # start at -1
+        data[70:] = the_sin[:-70] * 0.1 + yshift + 0.1
+        the_sin = np.sin(0.4 * np.arange(0, length) - np.pi/2) # start at -1
+        data[93:] = the_sin[:-93] * 0.1 + yshift + 0.16
+    elif length >= 92:
+        the_sin = np.sin(0.05 * np.arange(0, length) - np.pi/2) # start at -1
+        data[70:] = the_sin[:-70] * 0.1 + yshift + 0.1
+        the_sin = np.sin(0.2 * np.arange(0, length) - np.pi/2) # start at -1
+        data[80:] = the_sin[:-80] * 0.1 + yshift + 0.12
+    elif length > 80:
+        the_sin = np.sin(0.15 * np.arange(0, length) - np.pi/2) # start at -1
+        data[70:] = the_sin[:-70] * 0.1 + yshift + 0.1
+
+    return data
+
+def make_e_of_test_generate(input_audio):
+    start = 6302
+    end = start + 3200
+    audio_sample = input_audio[start:end]
+    section_lengths = [
+        78, 78, 79, 80, 80, 82, 83, 84, 84, 86,
+        87, 91, 91, 95, 99, 105, 112
+    ]
+    def make_e_section_generate(
+        length,
+        yshift,
+        first_val,
+        amps,
+        freqs,
+        shifts,
+    ):
+        np.testing.assert_allclose(len(amps), 8)
+        np.testing.assert_allclose(len(freqs), 8)
+        np.testing.assert_allclose(len(shifts), 8)
+        if first_val is None:
+            first_val = 0.0
+        data = np.zeros(shape=(length,), dtype=np.float32)
+        the_sin = np.sin(1.1 * np.arange(0,length) )
+        data[:] = the_sin * amps[0] + yshift
+        data[0] = first_val
+
+        data[7:] = the_sin[7:] * amps[1] + yshift - 0.05
+        data[27:] = the_sin[27:] * amps[2] + yshift - 0.07
+        #the_sin = np.sin(1.2 * np.arange(0, 78) )
+        data[35:] = the_sin[35:] * amps[3] + yshift - 0.08
+        the_sin = np.sin(0.85 * np.arange(0, length) - np.pi/2) # start at -1
+        data[39:] = the_sin[:-39] * amps[4] + yshift - 0.1
+        the_sin = np.sin(1.2 * np.arange(0,length) + np.pi/2) # start at 1
+        data[50:] = the_sin[:-50] * amps[5] + yshift - 0.07
+        the_sin = np.sin(0.8 * np.arange(0,length) - np.pi/2) # start at -1
+        data[63:] = the_sin[:-63] * amps[6] + yshift - 0.04
+        the_sin = np.sin(0.2 * np.arange(0, length) - np.pi/2) # start at -1
+        data[70:] = the_sin[:-70] * amps[7] + yshift + 0.1
+        return data
+
+
+    section_params = []
+    begin = 0
+    for i in range(len(section_lengths)):
+        actual_audio = audio_sample[begin:begin+section_lengths[i]]
+        section_params.append({
+            "actual_audio": actual_audio,
+            "section_length": section_lengths[i],
+            "y_shift_vals": np.linspace(-0.5, 0.0, 5*10),
+            "first_vals": np.linspace(-0.2, 0.0, 2*10),
+            "amps": [np.linspace(0.01, 0.2, 2*10) for i in range(8)],
+            "freqs": [np.linspace(0.1, 1.5, 15*10) for i in range(8)],
+            "shifts": [np.linspace(-0.2, 0.2, 4 * 10) for i in range(8)],
+        })
+        begin += section_lengths[i]
+    best_generated = []
+    for params_itr in range(len(section_params)):
+        params = section_params[params_itr]
+        print("Moving on to section:", params_itr)
+        actual_audio = params["actual_audio"]
+        section_length = params["section_length"]
+        y_shift_best = params["y_shift_vals"][0]
+        first_val_best = params["first_vals"][0]
+        amps_best = [params["amps"][0][0] for i in range(len(params["amps"]))]
+        np.testing.assert_allclose(amps_best, [0.01 for _ in range(8)])
+        freqs_best = [params["freqs"][0][0] for i in range(len(params["freqs"]))]
+        shifts_best = [params["shifts"][0][0] for i in range(len(params["shifts"]))]
+        generated = make_e_section_generate(
+            section_length,
+            yshift=y_shift_best,
+            first_val=first_val_best,
+            amps=amps_best,
+            freqs=freqs_best,
+            shifts=shifts_best)
+        lowest_error = np.linalg.norm(generated - actual_audio)
+        t1 = time.time()
+        for y_shift in params["y_shift_vals"]:
+            for first_val in params["first_vals"]:
+                generated = make_e_section_generate(
+                    section_length,
+                    yshift=y_shift,
+                    first_val=first_val,
+                    amps=amps_best,
+                    freqs=freqs_best,
+                    shifts=shifts_best)
+                error = np.linalg.norm(generated - actual_audio)
+                if error < lowest_error:
+                    lowest_error = error
+                    y_shift_best = y_shift
+                    first_val_best = first_val
+        t2 = time.time()
+        for amps_itr in range(len(params["amps"])):
+            amps = amps_best.copy()
+            for amps_try in params["amps"][amps_itr]:
+                #for freq_itr in range(len(params["freqs"])):
+                #    for freq_try in params["freqs"][freq_itr]:
+                amps[amps_itr] = amps_try
+                generated = make_e_section_generate(
+                    section_length,
+                    yshift=y_shift_best,
+                    first_val=first_val_best,
+                    amps=amps,
+                    freqs=freqs_best,
+                    shifts=shifts_best)
+                error = np.linalg.norm(generated - actual_audio)
+                if error < lowest_error:
+                    lowest_error = error
+                    amps_best[amps_itr] = amps_try
+        t3 = time.time()
+        print("y_shift_best:", y_shift_best, "first_val_best:", first_val_best,
+            "amps_best:", amps_best,
+            "shifts:", t2-t1,
+            "amps/freqs:", t3-t2)
+        best_generated.append(make_e_section_generate(
+            section_length,
+            yshift=y_shift_best,
+            first_val=first_val_best,
+            amps=amps_best,
+            freqs=freqs_best,
+            shifts=shifts_best,
+        ))
+
+    begin = 0
+    datas = best_generated
+    for i in range(len(datas)):
+        ax = plt.subplot(len(datas)+1, 1, 1+i)
+        markevery=[0, int(2.5), 5, 8, 11, 13, 15, 18, 22, 25, 28, 31, 33,
+            35, 39, 43, 45, 48, 50, 52, 55, 58, 60, 63, 67, 69,
+            74]
+        minimal_sample = audio_sample[begin:begin+section_lengths[i]]
+        begin += section_lengths[i]
+        ax.plot(minimal_sample, "-bD",)# markevery=markevery)
+        ax.plot(datas[i])
+        ax.set_title(str(section_lengths[i]))
+
+    plt.subplot(len(datas)+1, 1, len(datas) + 1)
+    plt.plot(audio_sample, "-bD", markevery=markevery)
+
+    plt.show()
+
+    num_repeats = 20
+    #play_numpy(np.tile(audio_sample[:1494], num_repeats))
+    #time.sleep(1)
+    #play_numpy(np.tile(np.concatenate(datas[:]), num_repeats))
+
+
+
 def make_e_of_test_reload(input_audio):
-    plt.subplot(3, 1, 1)
+    return make_e_of_test_generate(input_audio)
+
     #audio_sample = input_audio[6280:6380]
     #print(np.where(audio_sample == np.max(audio_sample)))
     start = 6302
@@ -501,12 +691,13 @@ def make_e_of_test_reload(input_audio):
     second_half_peaks += 1400
     print(second_half_peaks, get_distances_between_elements(second_half_peaks))
     markevery = np.concatenate([peaks, second_half_peaks])
-    plt.plot(audio_sample, "-bD", markevery=markevery)
 
-    minimal_sample = audio_sample[:78]
+
     # tile minimal_sample 15 times, spreading out the signal by 2 frames each time
     # then tile 20 times
 
+    datas = []
+    minimal_samples = []
     begin = 0
     end = 78
     data = np.zeros_like(audio_sample[begin:end])
@@ -526,47 +717,164 @@ def make_e_of_test_reload(input_audio):
     data[63:] = the_sin[:-63] * 0.04 - 0.14
     the_sin = np.sin(0.2 * np.arange(0, 78) - np.pi/2) # start at 0
     data[70:] = the_sin[:-70] * 0.1
+    minimal_samples.append(audio_sample[begin:end])
+    datas.append(make_e_section(end-begin))
+    np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
+    np.testing.assert_allclose(data, datas[-1])
 
-    plt.subplot(3, 1, 2)
-    plt.plot(minimal_sample)
-    plt.plot(data)
+    begin += 78
+    end += 78
+    data2 = data.copy()
+    minimal_samples.append(audio_sample[begin:end])
+    datas.append(make_e_section(end-begin))
+    np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
+    np.testing.assert_allclose(data2, datas[-1])
 
     begin += 78
     end += 79
-    minimal_sample2 = audio_sample[begin:end]
-    data2 = data.copy()
-    data2 = np.concatenate([data2, [data2[-1]]])
-    np.testing.assert_allclose(minimal_sample2.shape, data2.shape)
-
-    begin += 79
-    end += 79
-    minimal_sample3 = audio_sample[begin:end]
-    data3 = data2.copy()
-    the_sin = np.sin(1.1 * np.arange(0,end-begin) + np.pi/2 )
-    data3[:13] = the_sin[:13] * 0.1 - 0.1
-    the_sin = np.sin(0.85 * np.arange(0,end-begin) + np.pi/2)
-    data3[5:13] = the_sin[:8] * 0.1 - 0.2
-    np.testing.assert_allclose(minimal_sample3.shape, data3.shape)
+    minimal_samples.append(audio_sample[begin:end])
+    datas.append(make_e_section(end-begin, yshift=-0.14))
+    np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
 
     begin += 79
     end += 80
-    minimal_sample4 = audio_sample[begin:end]
-    data4 = data3.copy()
-    data4 -= 0.02
-    data4 = np.concatenate([data4, [data4[-1]]])
-    np.testing.assert_allclose(minimal_sample4.shape, data4.shape)
+    minimal_samples.append(audio_sample[begin:end])
+    datas.append(make_e_section(end-begin, yshift=-0.13))
+    np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
 
-    plt.subplot(3, 1, 3)
-    plt.plot(minimal_sample4)
-    plt.plot(data4)
+    begin += 80
+    end += 80
+    minimal_samples.append(audio_sample[begin:end])
+    datas.append(make_e_section(end-begin, yshift=-0.15))
+    np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
 
+    def add_section(begin, end, minimal_samples, datas, yshift, first_val=None):
+        print(minimal_samples[-1][-1], audio_sample[begin-1], begin)
+        np.testing.assert_allclose(minimal_samples[-1][-1], audio_sample[begin-1])
+        minimal_samples.append(audio_sample[begin:end])
+        datas.append(make_e_section(end-begin, yshift=yshift, first_val=first_val))
+        np.testing.assert_allclose(minimal_samples[-1].shape, datas[-1].shape)
+        return (begin, end)
+
+    section_lengths = [
+        78, 78, 79, 80, 80, 82, 83, 84, 84, 86,
+        87, 91, 91, 95, 99, 105, 112
+    ]
+
+    print(len(datas), end)
+    if True:
+
+        (begin, end) = add_section(
+            begin+80, end+82, minimal_samples, datas, yshift=-0.2)
+
+        (begin, end) = add_section(
+            begin+82, end+83, minimal_samples, datas,
+            yshift=-0.24, first_val=-0.06)
+
+        (begin, end) = add_section(
+            begin+83, end+84, minimal_samples, datas,
+            yshift=-0.26, first_val=-0.06)
+
+        (begin, end) = add_section(
+            begin+84, end+84, minimal_samples, datas,
+            yshift=-0.26, first_val=-0.09)
+
+
+
+        (begin, end) = add_section(
+            begin+84, end+86, minimal_samples, datas,
+            yshift=-0.26, first_val=-0.09)
+
+        (begin, end) = add_section(
+            begin+86, end+87, minimal_samples, datas,
+            yshift=-0.26, first_val=-0.09)
+
+        (begin, end) = add_section(
+            begin+87, end+91, minimal_samples, datas,
+            yshift=-0.29, first_val=-0.09)
+
+
+
+        (begin, end) = add_section(
+            begin+91, end+91, minimal_samples, datas,
+            yshift=-0.27, first_val=-0.11)
+
+        (begin, end) = add_section(
+            begin+91, end+95, minimal_samples, datas,
+            yshift=-0.29, first_val=-0.09)
+
+        (begin, end) = add_section(
+            begin+95, end+99, minimal_samples, datas,
+            yshift=-0.29, first_val=-0.09)
+
+        (begin, end) = add_section(
+            begin+99, end+105, minimal_samples, datas,
+            yshift=-0.29, first_val=-0.19)
+
+        (begin, end) = add_section(
+            begin+105, end+112, minimal_samples, datas,
+            yshift=-0.39, first_val=-0.19)
+
+    print("End:", end)
+    print("Num sections:", len(datas))
+
+
+
+
+
+    def make_section2(length):
+        def set_data(data, a, w, y):
+            data[:] = (a * w  + y)[:len(data)]
+        data = np.zeros(shape=(length,), dtype=np.float32)
+        shrink_factor = length * 4 / 78
+        a_first = 0.1
+        w_first = np.cos((np.pi / 2.5) * np.arange(length))
+        y_first = -0.1
+        set_data(data[0:], a_first, w_first, y_first)
+
+        return data
+
+        a_second = 0.05
+        w_second = np.cos((np.pi / 2) * np.arange(length) + np.pi)
+        y_second = -0.12
+        set_data(data[4:], a_second, w_second, y_second)
+        a_third = 0.06
+        w_third = np.cos((np.pi / 2.5) * np.arange(length) )
+        y_third = -0.2
+        set_data(data[8:], a_third, w_third, y_third)
+
+
+        return data
+
+    section_lengths = [
+        78, 78, 79, 80, 80, 82, 83, 84, 84, 86,
+        87, 91, 91, 95, 99, 105, 112
+    ]
+    np.testing.assert_allclose(len(section_lengths), 17)
+
+    begin = 0
+    for i in range(len(datas)):
+        ax = plt.subplot(len(datas)+1, 1, 1+i)
+        markevery=[0, int(2.5), 5, 8, 11, 13, 15, 18, 22, 25, 28, 31, 33,
+            35, 39, 43, 45, 48, 50, 52, 55, 58, 60, 63, 67, 69,
+            74]
+        minimal_sample = audio_sample[begin:begin+section_lengths[i]]
+        begin += section_lengths[i]
+        ax.plot(minimal_sample, "-bD",)# markevery=markevery)
+        data = make_section2(length=section_lengths[i])
+        assert data.shape == datas[i].shape, "Failed for " + str(i)
+        ax.plot(datas[i])
+        ax.set_title(str(section_lengths[i]))
+
+    plt.subplot(len(datas)+1, 1, len(datas) + 1)
+    plt.plot(audio_sample, "-bD", markevery=markevery)
 
     plt.show()
 
-    num_repeats = 100
-    #play_numpy(np.tile(audio_sample[:78], num_repeats))
+    num_repeats = 20
+    play_numpy(np.tile(audio_sample[:1494], num_repeats))
     #time.sleep(1)
-    #play_numpy(np.tile(data2, num_repeats))
+    play_numpy(np.tile(np.concatenate(datas[:]), num_repeats))
 
 
 
