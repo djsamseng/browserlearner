@@ -6,6 +6,8 @@ import numpy as np
 import pyaudio
 import torch
 
+import scipy.io.wavfile
+
 
 CHUNK = 1024
 FORMAT = pyaudio.paFloat32
@@ -131,9 +133,9 @@ def main():
         104,
         112
     ])
-    sin_part_idxes = torch.concat(
-        [ torch.arange(0,112, 5), torch.tensor([112]) ]
-    )
+    #sin_part_idxes = torch.concat(
+    #    [ torch.arange(0,112, 5), torch.tensor([112]) ]
+    #)
     sin_part_sizes = []
     for i in range(1, len(sin_part_idxes)):
         sin_part_sizes.append(sin_part_idxes[i] - sin_part_idxes[i-1])
@@ -141,19 +143,6 @@ def main():
     begin = 0
     for i in range(len(section_lengths)):
         x = torch.arange(0, input_size)
-        '''
-        x[7:] = np.arange(0, input_size-7)
-        x[27:] = np.arange(0, input_size-27)
-        x[35:] = np.arange(0, input_size-35)
-        x[39:] = np.arange(0, input_size-39)
-        x[50:] = np.arange(0, input_size-50)
-        x[63:] = np.arange(0, input_size-63)
-        x[70:] = np.arange(0, input_size-70)
-        x[80:] = np.arange(0, input_size-80)
-        x[92:] = np.arange(0, input_size-92)
-        x[100:] = np.arange(0, input_size-100)
-        x[104:] = np.arange(0, input_size-104)
-        '''
         X[i] = x
 
         y = torch.zeros(size=(input_size,))
@@ -198,13 +187,22 @@ def eval_model(model, X, Y, section_sizes, play_audio=False):
         print("===== Output audio =====")
         play_numpy(np.tile(output_audio, num_repeats))
 
+        scipy.io.wavfile.write(
+            "./data/recordings/makee_actual_manual_idx.wav", RATE,
+            np.tile(actual_audio, num_repeats)
+        )
+        scipy.io.wavfile.write(
+            "./data/recordings/makee_generated_manual_idx.wav", RATE,
+            np.tile(output_audio, num_repeats)
+        )
+
 def train_model(model, optimizer, X, Y):
     loss_fn = torch.nn.MSELoss()
     model.train()
 
     time_in_forward = 0.0
     time_in_backward = 0.0
-    for train_itr in range(20001):
+    for train_itr in range(40001):
         t0 = time.time()
         y_hat = model(X)
         loss = loss_fn(y_hat, Y)
